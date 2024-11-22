@@ -266,7 +266,7 @@ public class PengelolaKontakFrame extends javax.swing.JFrame {
     }//GEN-LAST:event_tambahActionPerformed
 
     private void hapusActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_hapusActionPerformed
-         int selectedRow = tabelkontak.getSelectedRow(); // Ambil baris yang dipilih
+        int selectedRow = tabelkontak.getSelectedRow(); // Ambil baris yang dipilih
         if (selectedRow == -1) {
             JOptionPane.showMessageDialog(this, "Pilih kontak yang ingin dihapus!");
             return;
@@ -291,6 +291,9 @@ public class PengelolaKontakFrame extends javax.swing.JFrame {
 
                 // Perbarui JTable
                 refreshTable();
+                txtnama.setText("");
+                txtnohp.setText("");
+                cbbkategori.setSelectedIndex(0);
 
             } catch (SQLException e) {
                 JOptionPane.showMessageDialog(this, "Gagal menghapus kontak.");
@@ -352,41 +355,41 @@ public class PengelolaKontakFrame extends javax.swing.JFrame {
 
     private void cariActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_cariActionPerformed
         String keyword = carikontak.getText();
-        
-    if (keyword == null || keyword.isEmpty()) {
-        JOptionPane.showMessageDialog(this, "Masukkan nama untuk pencarian!");
-        return;
-    }
-    String sql = "SELECT * FROM kontak WHERE nama LIKE ?";
-    try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-        pstmt.setString(1, "%" + keyword + "%"); 
-        try (ResultSet rs = pstmt.executeQuery()) {
-            // Buat model tabel
-            DefaultTableModel model = new DefaultTableModel();
-            model.addColumn("ID");
-            model.addColumn("Nama");
-            model.addColumn("No HP");
-            model.addColumn("Kategori");
 
-            // Tambahkan hasil pencarian ke model
-            while (rs.next()) {
-                Object[] row = {
-                    rs.getInt("id"),
-                    rs.getString("nama"),
-                    rs.getString("no_hp"),
-                    rs.getString("kategori")
-                };
-                model.addRow(row);
-            }
-
-            // Perbarui JTable
-            tabelkontak.setModel(model);
-
+        if (keyword == null || keyword.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Masukkan nama untuk pencarian!");
+            return;
         }
-    } catch (SQLException e) {
-        JOptionPane.showMessageDialog(this, "Gagal melakukan pencarian.");
-        e.printStackTrace();
-    }
+        String sql = "SELECT * FROM kontak WHERE nama LIKE ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, "%" + keyword + "%"); 
+            try (ResultSet rs = pstmt.executeQuery()) {
+                // Buat model tabel
+                DefaultTableModel model = new DefaultTableModel();
+                model.addColumn("ID");
+                model.addColumn("Nama");
+                model.addColumn("No HP");
+                model.addColumn("Kategori");
+
+                // Tambahkan hasil pencarian ke model
+                while (rs.next()) {
+                    Object[] row = {
+                        rs.getInt("id"),
+                        rs.getString("nama"),
+                        rs.getString("no_hp"),
+                        rs.getString("kategori")
+                    };
+                    model.addRow(row);
+                }
+
+                // Perbarui JTable
+                tabelkontak.setModel(model);
+
+            }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Gagal melakukan pencarian.");
+            e.printStackTrace();
+        }
     }//GEN-LAST:event_cariActionPerformed
 
     private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton1ActionPerformed
@@ -430,7 +433,13 @@ public class PengelolaKontakFrame extends javax.swing.JFrame {
         if (userSelection == JFileChooser.APPROVE_OPTION) {
         String filePath = fileChooser.getSelectedFile().getAbsolutePath();
            try {
-               imporKontakDariCSV(filePath);
+            try {
+                imporKontakDariCSV(filePath);
+            } catch (FileNotFoundException ex) {
+                Logger.getLogger(PengelolaKontakFrame.class.getName()).log(Level.SEVERE, null, ex);
+            } catch (SQLException ex) {
+                Logger.getLogger(PengelolaKontakFrame.class.getName()).log(Level.SEVERE, null, ex);
+            }
            } catch (IOException ex) {
                Logger.getLogger(PengelolaKontakFrame.class.getName()).log(Level.SEVERE, null, ex);
            }
@@ -626,6 +635,59 @@ public class PengelolaKontakFrame extends javax.swing.JFrame {
     }
     }
 
-    private void imporKontakDariCSV(String filePath) throws FileNotFoundException, IOException {
+    private void imporKontakDariCSV(String filePath) throws FileNotFoundException, IOException, SQLException {
+        String sql = "INSERT INTO kontak (id, nama, no_hp, kategori) VALUES (?, ?, ?, ?)"; 
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:dbManager.db");  
+             BufferedReader br = new BufferedReader(new FileReader(filePath));  
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {  
+
+            String line;  
+            int rowCount = 0;  
+
+            // Abaikan baris pertama (header)  
+            br.readLine();  
+
+            while ((line = br.readLine()) != null) {  
+                String[] values = line.split(",");  
+                if (values.length < 4) { // Pastikan ada 4 kolom  
+                    JOptionPane.showMessageDialog(null, "Baris tidak valid ditemukan: " + line, "Peringatan", JOptionPane.WARNING_MESSAGE);  
+                    continue;  
+                }  
+
+                try {  
+                    int id = Integer.parseInt(values[0].trim()); // ID  
+                    String nama = values[1].trim();               // Nama  
+                    String noHp = values[2].trim();               // No HP  
+                    String kategori = values[3].trim();           // Kategori  
+
+                    pstmt.setInt(1, id);   
+                    pstmt.setString(2, nama);   
+                    pstmt.setString(3, noHp);   
+                    pstmt.setString(4, kategori);   
+
+                    pstmt.addBatch();  
+                    rowCount++;  
+                } catch (NumberFormatException nfe) {  
+                    JOptionPane.showMessageDialog(null, "ID harus berupa angka: " + values[0] + " di baris " + line, "Peringatan", JOptionPane.WARNING_MESSAGE);  
+                }  
+            }  
+
+            if (rowCount > 0) {  
+                pstmt.executeBatch();  
+                JOptionPane.showMessageDialog(null, rowCount + " data berhasil diimpor dari file CSV!");  
+            } else {  
+                JOptionPane.showMessageDialog(null, "Tidak ada data yang valid untuk diimpor.", "Informasi", JOptionPane.INFORMATION_MESSAGE);  
+            }  
+
+        } catch (SQLException ex) {  
+            JOptionPane.showMessageDialog(null, "Kesalahan basis data: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);  
+            ex.printStackTrace();  
+        } catch (IOException ex) {  
+            JOptionPane.showMessageDialog(null, "Gagal membaca file: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);  
+            ex.printStackTrace();  
+        } catch (Exception e) {  
+            JOptionPane.showMessageDialog(null, "Gagal mengimpor data dari CSV: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);  
+            e.printStackTrace();  
+        }
     }
 }
